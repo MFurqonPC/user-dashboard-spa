@@ -2,7 +2,7 @@
 
 Aplikasi Single Page Application (SPA) sederhana untuk menampilkan daftar pengguna dari public API [JSONPlaceholder](https://jsonplaceholder.typicode.com/users). Dibuat dengan React (Vite) dan TailwindCSS, dengan komponen UI tanpa template dashboard.
 
-**Link deploy:** [ISI_LINK_VERCEL_DI_SINI]
+**Link deploy:** https://user-dashboard-spa.vercel.app
 
 ## Fitur
 
@@ -22,8 +22,8 @@ Aplikasi Single Page Application (SPA) sederhana untuk menampilkan daftar penggu
 ## Cara Menjalankan
 
 ```bash
-git clone [ISI_LINK_REPO_DI_SINI]
-cd user-dashboard
+git clone https://github.com/MFurqonPC/user-dashboard-spa.git
+cd user-dashboard-spa
 npm install
 npm run dev
 ```
