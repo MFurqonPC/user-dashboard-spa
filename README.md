@@ -8,7 +8,7 @@ Aplikasi Single Page Application (SPA) sederhana untuk menampilkan daftar penggu
 
 - Daftar pengguna dalam bentuk tabel
 - Pencarian realtime (client-side) berdasarkan nama atau email
-- Modal detail pengguna: kontak, alamat, dan perusahaan (bisa ditutup lewat tombol ✕, klik area luar, atau tombol Esc)
+- Modal detail pengguna: kontak, alamat, dan perusahaan (bisa ditutup lewat tombol x, klik area luar, atau tombol Esc)
 - State loading saat data dimuat
 - Pesan error yang ramah saat API gagal, lengkap dengan tombol "Coba lagi"
 - Tampilan responsif (kolom Kota dan Perusahaan disembunyikan di layar kecil)
@@ -53,31 +53,31 @@ src/
 
 ### 1. State Management & Lifecycle
 
-Pengambilan data saya taruh di custom hook `useFetchUsers`, pakai `useEffect` dan Fetch API biasa. Di dalamnya ada tiga state: `users` buat data-nya, `status` (`loading`/`success`/`error`), sama `errorMessage`.
+Pengambilan data ditangani oleh custom hook `useFetchUsers`, menggunakan `useEffect` dan Fetch API. Hook ini menyimpan tiga state: `users` untuk data, `status` (`loading`/`success`/`error`), dan `errorMessage`.
 
-**Soal infinite loop.** Dependency array `useEffect`-nya cuma saya isi `attempt` — sebuah counter yang nambah tiap kali tombol "Coba lagi" ditekan. Sengaja `users` atau `status` nggak saya masukkan ke dependency, soalnya kalau dimasukkan, `setUsers` bakal memicu render ulang, efek jalan lagi, fetch lagi, dan begitu terus tanpa berhenti.
+**Mencegah infinite loop.** Dependency array `useEffect` hanya berisi `attempt`, sebuah counter yang bertambah setiap tombol "Coba lagi" ditekan. State `users` dan `status` sengaja tidak dimasukkan ke dependency, karena jika dimasukkan, `setUsers` akan memicu render ulang, efek berjalan kembali, fetch dipanggil lagi, dan seterusnya tanpa henti.
 
-**Soal memory leak & race condition.** Setiap fetch saya bungkus dengan `AbortController`. Di cleanup function `useEffect`, saya panggil `controller.abort()` supaya request yang masih jalan dibatalkan begitu komponen unmount atau efeknya dijalankan ulang. Jadi nggak ada `setState` yang nyasar ke komponen yang udah nggak ada. Error dengan tipe `AbortError` sengaja saya abaikan karena itu memang pembatalan yang disengaja, bukan error beneran.
+**Mencegah memory leak dan race condition.** Setiap fetch dibungkus dengan `AbortController`. Pada cleanup function `useEffect`, `controller.abort()` dipanggil agar request yang masih berjalan dibatalkan saat komponen unmount atau efek dijalankan ulang. Dengan begitu, tidak ada `setState` yang mengarah ke komponen yang sudah tidak ada. Error bertipe `AbortError` sengaja diabaikan karena merupakan pembatalan yang disengaja, bukan error sesungguhnya.
 
-**Catatan pas development.** Waktu dev mode, di tab Network kelihatan ada dua request `users` — yang pertama statusnya `canceled`, yang kedua `200`. Ini normal, karena React StrictMode memang sengaja menjalankan efek dua kali (mount → cleanup → mount lagi) untuk bantu nemuin efek yang "kotor". Request pertama dibatalkan sama `AbortController` di cleanup, jadi ini malah jadi bukti kalau cleanup-nya bekerja dengan benar. Di build production cuma ada satu request.
+**Catatan saat development.** Pada dev mode, tab Network menampilkan dua request `users` — yang pertama berstatus `canceled`, yang kedua `200`. Hal ini normal, karena React StrictMode memang menjalankan efek dua kali (mount → cleanup → mount kembali) untuk membantu menemukan efek yang tidak bersih. Request pertama dibatalkan oleh `AbortController` pada cleanup, yang justru membuktikan cleanup bekerja dengan benar. Pada build production hanya terdapat satu request.
 
 ### 2. Struktur Folder
 
-Saya pisah folder berdasarkan tanggung jawabnya masing-masing:
+Folder dipisahkan berdasarkan tanggung jawab masing-masing:
 
-- `services/` isinya pemanggilan API. Kalau nanti endpoint atau cara fetch-nya berubah, saya cukup ubah di satu tempat ini aja, UI-nya nggak perlu diutak-atik.
-- `hooks/` isinya logika stateful yang saya bungkus jadi custom hook (`useFetchUsers`), biar komponen tinggal fokus ke tampilan aja.
-- `utils/` isinya fungsi murni kayak `filterUsers` — gampang dites dan dipakai ulang karena nggak nyangkut ke React sama sekali.
-- `components/` isinya komponen UI kecil-kecil yang masing-masing punya satu tanggung jawab (tabel, input pencarian, modal, loading, error).
+- `services/` berisi pemanggilan API. Jika endpoint atau cara fetch berubah, perubahan cukup dilakukan di satu tempat ini, tanpa memengaruhi UI.
+- `hooks/` berisi logika stateful yang dibungkus sebagai custom hook (`useFetchUsers`), sehingga komponen dapat fokus pada tampilan.
+- `utils/` berisi fungsi murni seperti `filterUsers`, yang mudah diuji dan digunakan ulang karena tidak bergantung pada React.
+- `components/` berisi komponen UI kecil dengan satu tanggung jawab masing-masing (tabel, input pencarian, modal, loading, error).
 
-Dengan cara ini tiap file punya satu alasan aja buat berubah, jadi kodenya lebih gampang dibaca, dirawat, dan dikembangkan ke depannya.
+Dengan pemisahan ini, setiap file memiliki satu alasan untuk berubah, sehingga kode lebih mudah dibaca, dirawat, dan dikembangkan.
 
 ### 3. Optimasi Kinerja (10.000 data)
 
-Kalau API-nya balikin 10.000 data dan aplikasi jadi lag pas ngetik di kolom pencarian, ini yang bakal saya lakukan:
+Jika API mengembalikan 10.000 data dan aplikasi mengalami lag saat mengetik di kolom pencarian, berikut pendekatan yang akan saya lakukan:
 
-1. **`useDeferredValue`** (atau `useTransition`): input tetap update langsung, tapi proses filter dan render hasilnya dikasih prioritas lebih rendah, jadi ngetik tetap terasa responsif. Ini sudah saya pakai di aplikasi ini.
-2. **`useMemo`**: hasil filter cuma dihitung ulang kalau data atau kata kuncinya berubah, bukan di setiap render. Sudah dipakai juga.
-3. **`React.memo` + `useCallback`**: baris tabel saya bungkus `memo`, handler klik saya bungkus `useCallback`, jadi baris yang datanya nggak berubah nggak perlu dirender ulang.
-4. **Virtualisasi list** (misalnya pakai `react-window`): cuma baris yang kelihatan di layar yang dirender ke DOM. Ini solusi yang paling ngefek, karena merender 10.000 elemen DOM sekaligus itu sumber lag paling besar.
-5. **Opsional:** debounce di input, atau pagination.
+1. **`useDeferredValue`** (atau `useTransition`): input tetap diperbarui langsung, sementara proses filter dan render hasil diberi prioritas lebih rendah, sehingga proses mengetik tetap terasa responsif. Sudah diterapkan pada aplikasi ini.
+2. **`useMemo`**: hasil filter hanya dihitung ulang ketika data atau kata kunci berubah, bukan pada setiap render. Sudah diterapkan.
+3. **`React.memo` + `useCallback`**: baris tabel dibungkus `memo`, handler klik dibungkus `useCallback`, sehingga baris yang datanya tidak berubah tidak perlu dirender ulang.
+4. **Virtualisasi list** (misalnya menggunakan `react-window`): hanya baris yang terlihat di layar yang dirender ke DOM. Ini merupakan solusi paling berdampak, karena merender 10.000 elemen DOM sekaligus adalah sumber lag utama.
+5. **Opsional:** debounce pada input, atau pagination.
